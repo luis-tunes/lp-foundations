@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    environment:
+      POETRY_HOME: /opt/poetry
+      PATH: /opt/poetry/bin:$PATH
+    command: poetry run python your_main_script.py

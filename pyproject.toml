@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "life_expectancy"
+version = "0.1.0"
+description = "First assignment of the Foundations Learning Path"
+authors = ["Luís Tunes <luis.tunes@nos.pt>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+pandas = "^2.2.0"
+pydantic = "^2.7.4"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.5"
+pylint = "^2.11.1"
+pytest-cov = "^2.12.1"
+toml = "^0.10.2"
+
+[tool.coverage.run]
+omit = [
+    "*/conftest.py", "*/test*", # omit test files
+]
+
+[tool.coverage.report]
+fail_under = 80
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["life_expectancy"]
