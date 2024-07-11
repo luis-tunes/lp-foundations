@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError, field_validator
 from typing import List, Dict, Any
 import logging
+import argparse
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -46,16 +47,18 @@ class LifeExpectancyModel(BaseModel):
         return v
 
 class LifeExpectancyCleaner:
-    def __init__(self, input_path: Path, output_path: Path) -> None:
+    def __init__(self, input_path: Path, output_path: Path, country: str = 'PT') -> None:
         """
         Initialize LifeExpectancyCleaner object.
 
         Args:
         -   input_path (Path): Path to the input TSV file.
         -   output_path (Path): Path to save the cleaned CSV file.
+        -   country (str): Country code to filter data by. Default is 'PT'.
         """
         self.input_path = input_path
         self.output_path = output_path
+        self.country = country
         self.logger = logging.getLogger(__name__)  # Initialize logger for the class
 
     def clean_value(self, value: Any) -> float:
@@ -94,7 +97,7 @@ class LifeExpectancyCleaner:
             year = int(row['year'])
             value = self.clean_value(row['value'])
             le = LifeExpectancyModel(unit=row['unit'], sex=row['sex'], age=row['age'], region=row['region'], year=year, value=value)
-            return le.dict()
+            return le.model_dump()
         except ValidationError as e:
             raise ValidationError(f"Validation error: {e}")  # Propagate validation errors
         except (KeyError, ValueError) as e:
@@ -118,12 +121,12 @@ class LifeExpectancyCleaner:
             df_long.drop(columns=['unit,sex,age,geo\\time'], inplace=True)
             df_long.rename(columns={'geo\\time': 'region'}, inplace=True)
 
-            # Filter for rows where region is 'PT'
-            df_long = df_long[df_long['region'] == 'PT']
+            # Filter for rows where region is the specified country
+            df_long = df_long[df_long['region'] == self.country]
 
             self.logger.info("Starting data validation and conversion")
             validated_rows = []
-            for index, row in df_long.iterrows():
+            for _, row in df_long.iterrows():
                 validated_rows.append(self.validate_row(row))
 
             validated_df = pd.DataFrame(validated_rows)
@@ -143,8 +146,15 @@ class LifeExpectancyCleaner:
             raise RuntimeError(f"Unexpected error occurred: {e}")
 
 if __name__ == "__main__":
-    input_path = Path('life_expectancy/data/eu_life_expectancy_raw.tsv')
-    output_path = Path('life_expectancy/data/pt_life_expectancy.csv')
+    parser = argparse.ArgumentParser(description="Clean life expectancy data")
+    parser.add_argument('--input', type=str, default='data/eu_life_expectancy_raw.tsv', help='Path to the input TSV file')
+    parser.add_argument('--output', type=str, default='data/pt_life_expectancy.csv', help='Path to save the cleaned CSV file')
+    parser.add_argument('--country', type=str, default='PT', help='Country code to filter data by')
 
-    cleaner = LifeExpectancyCleaner(input_path, output_path)
+    args = parser.parse_args()
+
+    input_path = Path(args.input)
+    output_path = Path(args.output)
+
+    cleaner = LifeExpectancyCleaner(input_path, output_path, args.country)
     cleaner.clean_data()
