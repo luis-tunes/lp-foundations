@@ -4,6 +4,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 from typing import List, Dict, Any
 import logging
 import argparse
+import os
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -147,8 +148,12 @@ class LifeExpectancyCleaner:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Clean life expectancy data")
-    parser.add_argument('--input', type=str, default='data/eu_life_expectancy_raw.tsv', help='Path to the input TSV file')
-    parser.add_argument('--output', type=str, default='data/pt_life_expectancy.csv', help='Path to save the cleaned CSV file')
+
+    default_input_path = os.path.join('life_expectancy', 'data', 'eu_life_expectancy_raw.tsv')
+    default_output_path = os.path.join('life_expectancy', 'data', 'pt_life_expectancy.csv')
+
+    parser.add_argument('--input', type=str, default=default_input_path, help='Path to the input TSV file')
+    parser.add_argument('--output', type=str, default=default_output_path, help='Path to save the cleaned CSV file')
     parser.add_argument('--country', type=str, default='PT', help='Country code to filter data by')
 
     args = parser.parse_args()
