@@ -48,17 +48,13 @@ class LifeExpectancyModel(BaseModel):
         return v
 
 class LifeExpectancyCleaner:
-    def __init__(self, input_path: Path, output_path: Path, country: str = 'PT') -> None:
+    def __init__(self, country: str = 'PT') -> None:
         """
         Initialize LifeExpectancyCleaner object.
 
         Args:
-        -   input_path (Path): Path to the input TSV file.
-        -   output_path (Path): Path to save the cleaned CSV file.
         -   country (str): Country code to filter data by. Default is 'PT'.
         """
-        self.input_path = input_path
-        self.output_path = output_path
         self.country = country
         self.logger = logging.getLogger(__name__)  # Initialize logger for the class
 
@@ -98,26 +94,25 @@ class LifeExpectancyCleaner:
             year = int(row['year'])
             value = self.clean_value(row['value'])
             le = LifeExpectancyModel(unit=row['unit'], sex=row['sex'], age=row['age'], region=row['region'], year=year, value=value)
-            return le.model_dump()
+            return le.dict()
         except ValidationError as e:
             raise ValidationError(f"Validation error: {e}")  # Propagate validation errors
         except (KeyError, ValueError) as e:
             raise ValueError(f"Error processing row: {e}")  # Handle unexpected errors
 
-    def clean_data(self) -> None:
+    def clean_data(self, data: pd.DataFrame) -> pd.DataFrame:
         """
-        Cleans and validates data from input file.
+        Cleans and validates data.
 
-        Raises:
-        -   FileNotFoundError: If input file is not found.
-        -   RuntimeError: If unexpected error occurs during data processing.
+        Args:
+        -   data (pd.DataFrame): Input DataFrame to clean.
+
+        Returns:
+        -   pd.DataFrame: Cleaned DataFrame.
         """
         try:
-            self.logger.info(f"Loading data from {self.input_path}")
-            df = pd.read_csv(self.input_path, sep='\t')
-
             # Unpivot DataFrame to long format
-            df_long = pd.melt(df, id_vars=['unit,sex,age,geo\\time'], var_name='year', value_name='value')
+            df_long = pd.melt(data, id_vars=['unit,sex,age,geo\\time'], var_name='year', value_name='value')
             df_long[['unit', 'sex', 'age', 'geo\\time']] = df_long['unit,sex,age,geo\\time'].str.split(',', expand=True)
             df_long.drop(columns=['unit,sex,age,geo\\time'], inplace=True)
             df_long.rename(columns={'geo\\time': 'region'}, inplace=True)
@@ -125,7 +120,6 @@ class LifeExpectancyCleaner:
             # Filter for rows where region is the specified country
             df_long = df_long[df_long['region'] == self.country]
 
-            self.logger.info("Starting data validation and conversion")
             validated_rows = []
             for _, row in df_long.iterrows():
                 validated_rows.append(self.validate_row(row))
@@ -135,16 +129,71 @@ class LifeExpectancyCleaner:
             # Remove rows with NaN values in 'value' column
             validated_df.dropna(subset=['value'], inplace=True)
 
-            # Save the resulting DataFrame to CSV
-            validated_df.to_csv(self.output_path, index=False)
-            self.logger.info(f"Cleaned data saved to {self.output_path}")
+            return validated_df
 
-        except FileNotFoundError as e:
-            self.logger.error(f"File not found: {self.input_path}")
-            raise e
         except Exception as e:
-            self.logger.error(f"Unexpected error occurred: {e}")
-            raise RuntimeError(f"Unexpected error occurred: {e}")
+            self.logger.error(f"Unexpected error occurred during data cleaning: {e}")
+            raise RuntimeError(f"Unexpected error occurred during data cleaning: {e}")
+
+def load_data(input_path: Path) -> pd.DataFrame:
+    """
+    Load data from input file.
+
+    Args:
+    -   input_path (Path): Path to the input TSV file.
+
+    Returns:
+    -   pd.DataFrame: Loaded DataFrame.
+    """
+    try:
+        return pd.read_csv(input_path, sep='\t')
+    except FileNotFoundError as e:
+        logging.error(f"File not found: {input_path}")
+        raise e
+    except Exception as e:
+        logging.error(f"Error loading data from {input_path}: {e}")
+        raise RuntimeError(f"Error loading data from {input_path}: {e}")
+
+def save_data(data: pd.DataFrame, output_path: Path) -> None:
+    """
+    Save data to CSV file.
+
+    Args:
+    -   data (pd.DataFrame): Data to save.
+    -   output_path (Path): Path to save the cleaned CSV file.
+    """
+    try:
+        data.to_csv(output_path, index=False)
+        logging.info(f"Cleaned data saved to {output_path}")
+    except Exception as e:
+        logging.error(f"Error saving data to {output_path}: {e}")
+        raise RuntimeError(f"Error saving data to {output_path}: {e}")
+
+def main(input_path: Path, output_path: Path, country: str = 'PT') -> None:
+    """
+    Main function to orchestrate data cleaning process.
+
+    Args:
+    -   input_path (Path): Path to the input TSV file.
+    -   output_path (Path): Path to save the cleaned CSV file.
+    -   country (str): Country code to filter data by. Default is 'PT'.
+    """
+    try:
+        # Load data
+        data = load_data(input_path)
+
+        # Initialize cleaner
+        cleaner = LifeExpectancyCleaner(country)
+
+        # Clean data
+        cleaned_data = cleaner.clean_data(data)
+
+        # Save cleaned data
+        save_data(cleaned_data, output_path)
+
+    except Exception as e:
+        logging.error(f"Unexpected error occurred during processing: {e}")
+        raise RuntimeError(f"Unexpected error occurred during processing: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Clean life expectancy data")
@@ -161,5 +210,4 @@ if __name__ == "__main__":
     input_path = Path(args.input)
     output_path = Path(args.output)
 
-    cleaner = LifeExpectancyCleaner(input_path, output_path, args.country)
-    cleaner.clean_data()
+    main(input_path, output_path, args.country)
